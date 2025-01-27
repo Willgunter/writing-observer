@@ -42,22 +42,7 @@ Using the **JupyterLab Extension Cookiecutter** is the most straightforward way 
    cd code-execution-logger
    ```
 
-### **B. Understand the Extension Structure**
-
-A typical JupyterLab extension scaffold includes:
-
-- **`package.json`**: Defines dependencies and scripts.
-- **`tsconfig.json`**: TypeScript configuration.
-- **`src/`**: Source code for the extension.
-- **`style/`**: CSS or other styling files.
-- **`README.md`**: Documentation.
-- **`test/`**: Testing scripts.
-
----
-
 ## **4. Developing Your Extension**
-
-With the scaffold in place, you can start implementing your desired functionality.
 
 ### **A. Implementing Code Execution Tracking**
 
@@ -143,9 +128,9 @@ To track when a user executes a cell and log changes, follow these steps:
    While developing, it's convenient to have a development server that rebuilds your extension on file changes.
 
    ```bash
-   yarn install
-   yarn build
-   yarn watch
+   npm install
+   npm build
+   npm watch
    ```
 3. **Test the Extension Locally**
 
@@ -172,9 +157,9 @@ To track when a user executes a cell and log changes, follow these steps:
 3. **Build and Watch for Changes:**
 
    ```bash
-   yarn install
-   yarn build
-   yarn watch
+   npm install
+   npm build
+   npm watch
    ```
 
 4. **Launch JupyterLab:**
@@ -191,12 +176,11 @@ To track when a user executes a cell and log changes, follow these steps:
    jupyter labextension install .
    ```
 
-   **Note:** Ensure that the development server (`yarn watch`) is running during this process.
+   **Note:** Ensure that the development server (`npm watch`) is running during this process.
 
 - **Server Communication Issues:**
   
   - Ensure that the server endpoint (`/myextension/log`) is reachable.
-  - Handle CORS policies if necessary.
 
 ---
 Integrating w/ JupyterHub
