@@ -1,7 +1,37 @@
-# Configuration file for jupyterhub.
+import sys
+import os
+
+# Get the directory of jupyterhub_config.py (project root)
+project_root = os.path.dirname(os.path.abspath(__file__))
+
+# Add the project root to Python's module search path
+sys.path.insert(0, project_root) # Configuration file for jupyterhub.
+
+from jupyterhub_extension.simple_authenticator import SimpleAuthenticator
 
 c = get_config()  #noqa
-c.JupyterHub.bind_url = 'http://:8000'
+
+c.JupyterHub.authenticator_class = 'dummyauthenticator.DummyAuthenticator' # SimpleAuthenticator
+c.DummyAuthenticator.password = "password"
+# c.SimpleAuthenticator.admin_users = {'admin_username'}
+c.Authenticator.allowed_users = {"user1"}
+c.Authenticator.allow_all = True
+# Disable XSRF checks for simplicity (for testing only!)
+c.JupyterHub.tornado_settings = {
+    "xsrf_cookies": False
+}
+
+# Set a persistent cookie secret (required for security)
+c.JupyterHub.cookie_secret_file = os.path.join(os.path.dirname(__file__), "jupyterhub_cookie_secret")
+
+c.JupyterHub.base_url = "/hub/"
+
+# Configure the hub to listen on all interfaces
+c.JupyterHub.ip = "0.0.0.0"
+c.JupyterHub.port = 8000
+
+# Ensure the proxy routes traffic to the hub
+c.ConfigurableHTTPProxy.api_url = "http://127.0.0.1:8001"
 
 #------------------------------------------------------------------------------
 # Application(SingletonConfigurable) configuration
@@ -1002,6 +1032,112 @@ c.JupyterHub.bind_url = 'http://:8000'
 # c.JupyterHub.user_redirect_hook = None
 
 #------------------------------------------------------------------------------
+# Proxy(LoggingConfigurable) configuration
+#------------------------------------------------------------------------------
+## Base class for configurable proxies that JupyterHub can use.
+#  
+#  A proxy implementation should subclass this and must define the following
+#  methods:
+#  
+#  - :meth:`.get_all_routes` return a dictionary of all JupyterHub-related routes
+#  - :meth:`.add_route` adds a route - :meth:`.delete_route` deletes a route
+#  
+#  In addition to these, the following method(s) may need to be implemented:
+#  
+#  - :meth:`.start` start the proxy, if it should be launched by the Hub
+#    instead of externally managed.
+#    If the proxy is externally managed, it should set :attr:`should_start` to False.
+#  - :meth:`.stop` stop the proxy. Only used if :meth:`.start` is also used.
+#  
+#  And the following method(s) are optional, but can be provided:
+#  
+#  - :meth:`.get_route` gets a single route.
+#    There is a default implementation that extracts data from :meth:`.get_all_routes`,
+#    but implementations may choose to provide a more efficient implementation
+#    of fetching a single route.
+
+## Additional routes to be maintained in the proxy.
+#  
+#  A dictionary with a route specification as key, and a URL as target. The hub
+#  will ensure this route is present in the proxy.
+#  
+#  If the hub is running in host based mode (with JupyterHub.subdomain_host set),
+#  the routespec *must* have a domain component (example.com/my-url/). If the hub
+#  is not running in host based mode, the routespec *must not* have a domain
+#  component (/my-url/).
+#  
+#  Helpful when the hub is running in API-only mode.
+#  Default: {}
+# c.Proxy.extra_routes = {}
+
+## Should the Hub start the proxy
+#  
+#          If True, the Hub will start the proxy and stop it.
+#          Set to False if the proxy is managed externally,
+#          such as by systemd, docker, or another service manager.
+#  Default: True
+# c.Proxy.should_start = True
+
+#------------------------------------------------------------------------------
+# ConfigurableHTTPProxy(Proxy) configuration
+#------------------------------------------------------------------------------
+## Proxy implementation for the default configurable-http-proxy.
+#  
+#  This is the default proxy implementation for running the nodejs proxy
+#  `configurable-http-proxy`.
+#  
+#  If the proxy should not be run as a subprocess of the Hub, (e.g. in a separate
+#  container), set::
+#  
+#      c.ConfigurableHTTPProxy.should_start = False
+
+## The ip (or hostname) of the proxy's API endpoint
+#  Default: ''
+# c.ConfigurableHTTPProxy.api_url = ''
+
+## The Proxy auth token
+#  
+#          Loaded from the CONFIGPROXY_AUTH_TOKEN env variable by default.
+#  Default: ''
+# c.ConfigurableHTTPProxy.auth_token = ''
+
+## Interval (in seconds) at which to check if the proxy is running.
+#  Default: 5
+# c.ConfigurableHTTPProxy.check_running_interval = 5
+
+## The command to start the proxy
+#  Default: ['configurable-http-proxy']
+# c.ConfigurableHTTPProxy.command = ['configurable-http-proxy']
+
+## The number of requests allowed to be concurrently outstanding to the proxy
+#  
+#  Limiting this number avoids potential timeout errors by sending too many
+#  requests to update the proxy at once
+#  Default: 10
+# c.ConfigurableHTTPProxy.concurrency = 10
+
+## Add debug-level logging to the Proxy.
+#  Default: False
+# c.ConfigurableHTTPProxy.debug = False
+
+## 
+#  See also: Proxy.extra_routes
+# c.ConfigurableHTTPProxy.extra_routes = {}
+
+## Proxy log level
+#  Choices: any of ['debug', 'info', 'warn', 'error'] (case-insensitive)
+#  Default: 'info'
+# c.ConfigurableHTTPProxy.log_level = 'info'
+
+## File in which to write the PID of the proxy process.
+#  Default: 'jupyterhub-proxy.pid'
+# c.ConfigurableHTTPProxy.pid_file = 'jupyterhub-proxy.pid'
+
+## Should the Hub start the proxy
+#  See also: Proxy.should_start
+# c.ConfigurableHTTPProxy.should_start = True
+
+#------------------------------------------------------------------------------
 # Authenticator(LoggingConfigurable) configuration
 #------------------------------------------------------------------------------
 ## Base class for implementing an authentication provider for JupyterHub
@@ -1355,421 +1491,108 @@ c.JupyterHub.bind_url = 'http://:8000'
 # c.Authenticator.whitelist = set()
 
 #------------------------------------------------------------------------------
-# LocalAuthenticator(Authenticator) configuration
+# DummyAuthenticator(Authenticator) configuration
 #------------------------------------------------------------------------------
-## Base class for Authenticators that work with local Linux/UNIX users
+## Dummy Authenticator for testing
 #  
-#  Checks for local users, and can attempt to create them if they exist.
-
-## The command to use for creating users as a list of strings
+#  By default, any username + password is allowed If a non-empty password is set,
+#  any username will be allowed if it logs in with that password.
 #  
-#  For each element in the list, the string USERNAME will be replaced with the
-#  user's username. The username will also be appended as the final argument.
+#  .. versionadded:: 1.0
 #  
-#  For Linux, the default value is:
-#  
-#      ['adduser', '-q', '--gecos', '""', '--disabled-password']
-#  
-#  To specify a custom home directory, set this to:
-#  
-#      ['adduser', '-q', '--gecos', '""', '--home', '/customhome/USERNAME', '--
-#  disabled-password']
-#  
-#  This will run the command:
-#  
-#      adduser -q --gecos "" --home /customhome/river --disabled-password river
-#  
-#  when the user 'river' is created.
-#  Default: []
-# c.LocalAuthenticator.add_user_cmd = []
+#  .. versionadded:: 5.0
+#      `allow_all` defaults to True,
+#      preserving default behavior.
 
 ## 
 #  See also: Authenticator.admin_users
-# c.LocalAuthenticator.admin_users = set()
+# c.DummyAuthenticator.admin_users = set()
 
 ## 
 #  See also: Authenticator.allow_all
-# c.LocalAuthenticator.allow_all = False
+# c.DummyAuthenticator.allow_all = False
 
 ## 
 #  See also: Authenticator.allow_existing_users
-# c.LocalAuthenticator.allow_existing_users = False
-
-## Allow login from all users in these UNIX groups.
-#  
-#  .. versionchanged:: 5.0
-#      `allowed_groups` may be specified together with allowed_users,
-#      to grant access by group OR name.
-#  Default: set()
-# c.LocalAuthenticator.allowed_groups = set()
+# c.DummyAuthenticator.allow_existing_users = False
 
 ## 
 #  See also: Authenticator.allowed_users
-# c.LocalAuthenticator.allowed_users = set()
+# c.DummyAuthenticator.allowed_users = set()
 
 ## Is there any allow config?
 #  See also: Authenticator.any_allow_config
-# c.LocalAuthenticator.any_allow_config = False
+# c.DummyAuthenticator.any_allow_config = False
 
 ## The max age (in seconds) of authentication info
 #  See also: Authenticator.auth_refresh_age
-# c.LocalAuthenticator.auth_refresh_age = 300
+# c.DummyAuthenticator.auth_refresh_age = 300
 
 ## Automatically begin the login process
 #  See also: Authenticator.auto_login
-# c.LocalAuthenticator.auto_login = False
+# c.DummyAuthenticator.auto_login = False
 
 ## 
 #  See also: Authenticator.auto_login_oauth2_authorize
-# c.LocalAuthenticator.auto_login_oauth2_authorize = False
+# c.DummyAuthenticator.auto_login_oauth2_authorize = False
 
 ## 
 #  See also: Authenticator.blocked_users
-# c.LocalAuthenticator.blocked_users = set()
-
-## If set to True, will attempt to create local system users if they do not exist
-#  already.
-#  
-#  Supports Linux and BSD variants only.
-#  Default: False
-# c.LocalAuthenticator.create_system_users = False
+# c.DummyAuthenticator.blocked_users = set()
 
 ## Delete any users from the database that do not pass validation
 #  See also: Authenticator.delete_invalid_users
-# c.LocalAuthenticator.delete_invalid_users = False
+# c.DummyAuthenticator.delete_invalid_users = False
 
 ## Enable persisting auth_state (if available).
 #  See also: Authenticator.enable_auth_state
-# c.LocalAuthenticator.enable_auth_state = False
-
-## DEPRECATED: use allowed_groups
-#  Default: set()
-# c.LocalAuthenticator.group_whitelist = set()
+# c.DummyAuthenticator.enable_auth_state = False
 
 ## Let authenticator manage user groups
 #  See also: Authenticator.manage_groups
-# c.LocalAuthenticator.manage_groups = False
+# c.DummyAuthenticator.manage_groups = False
 
 ## Let authenticator manage roles
 #  See also: Authenticator.manage_roles
-# c.LocalAuthenticator.manage_roles = False
+# c.DummyAuthenticator.manage_roles = False
 
 ## 
 #  See also: Authenticator.otp_prompt
-# c.LocalAuthenticator.otp_prompt = 'OTP:'
+# c.DummyAuthenticator.otp_prompt = 'OTP:'
+
+## Set a global password for all users wanting to log in.
+#  
+#  This allows users with any username to log in with the same static password.
+#  Default: ''
+# c.DummyAuthenticator.password = ''
 
 ## 
 #  See also: Authenticator.post_auth_hook
-# c.LocalAuthenticator.post_auth_hook = None
+# c.DummyAuthenticator.post_auth_hook = None
 
 ## Force refresh of auth prior to spawn.
 #  See also: Authenticator.refresh_pre_spawn
-# c.LocalAuthenticator.refresh_pre_spawn = False
+# c.DummyAuthenticator.refresh_pre_spawn = False
 
 ## 
 #  See also: Authenticator.request_otp
-# c.LocalAuthenticator.request_otp = False
+# c.DummyAuthenticator.request_otp = False
 
 ## Reset managed roles to result of `load_managed_roles()` on startup.
 #  See also: Authenticator.reset_managed_roles_on_startup
-# c.LocalAuthenticator.reset_managed_roles_on_startup = False
-
-## Dictionary of uids to use at user creation time. This helps ensure that users
-#  created from the database get the same uid each time they are created in
-#  temporary deployments or containers.
-#  Default: {}
-# c.LocalAuthenticator.uids = {}
+# c.DummyAuthenticator.reset_managed_roles_on_startup = False
 
 ## Dictionary mapping authenticator usernames to JupyterHub users.
 #  See also: Authenticator.username_map
-# c.LocalAuthenticator.username_map = {}
+# c.DummyAuthenticator.username_map = {}
 
 ## 
 #  See also: Authenticator.username_pattern
-# c.LocalAuthenticator.username_pattern = ''
+# c.DummyAuthenticator.username_pattern = ''
 
 ## Deprecated, use `Authenticator.allowed_users`
 #  See also: Authenticator.whitelist
-# c.LocalAuthenticator.whitelist = set()
-
-#------------------------------------------------------------------------------
-# PAMAuthenticator(LocalAuthenticator) configuration
-#------------------------------------------------------------------------------
-## Authenticate local UNIX users with PAM
-
-## 
-#  See also: LocalAuthenticator.add_user_cmd
-# c.PAMAuthenticator.add_user_cmd = []
-
-## Authoritative list of user groups that determine admin access. Users not in
-#  these groups can still be granted admin status through admin_users.
-#  
-#  allowed/blocked rules still apply.
-#  
-#  Note: As of JupyterHub 2.0, full admin rights should not be required, and more
-#  precise permissions can be managed via roles.
-#  Default: set()
-# c.PAMAuthenticator.admin_groups = set()
-
-## 
-#  See also: Authenticator.admin_users
-# c.PAMAuthenticator.admin_users = set()
-
-## 
-#  See also: Authenticator.allow_all
-# c.PAMAuthenticator.allow_all = False
-
-## 
-#  See also: Authenticator.allow_existing_users
-# c.PAMAuthenticator.allow_existing_users = False
-
-## 
-#  See also: LocalAuthenticator.allowed_groups
-# c.PAMAuthenticator.allowed_groups = set()
-
-## 
-#  See also: Authenticator.allowed_users
-# c.PAMAuthenticator.allowed_users = set()
-
-## Is there any allow config?
-#  See also: Authenticator.any_allow_config
-# c.PAMAuthenticator.any_allow_config = False
-
-## The max age (in seconds) of authentication info
-#  See also: Authenticator.auth_refresh_age
-# c.PAMAuthenticator.auth_refresh_age = 300
-
-## Automatically begin the login process
-#  See also: Authenticator.auto_login
-# c.PAMAuthenticator.auto_login = False
-
-## 
-#  See also: Authenticator.auto_login_oauth2_authorize
-# c.PAMAuthenticator.auto_login_oauth2_authorize = False
-
-## 
-#  See also: Authenticator.blocked_users
-# c.PAMAuthenticator.blocked_users = set()
-
-## Whether to check the user's account status via PAM during authentication.
-#  
-#  The PAM account stack performs non-authentication based account management. It
-#  is typically used to restrict/permit access to a service and this step is
-#  needed to access the host's user access control.
-#  
-#  Disabling this can be dangerous as authenticated but unauthorized users may be
-#  granted access and, therefore, arbitrary execution on the system.
-#  Default: True
-# c.PAMAuthenticator.check_account = True
-
-## 
-#  See also: LocalAuthenticator.create_system_users
-# c.PAMAuthenticator.create_system_users = False
-
-## Delete any users from the database that do not pass validation
-#  See also: Authenticator.delete_invalid_users
-# c.PAMAuthenticator.delete_invalid_users = False
-
-## Enable persisting auth_state (if available).
-#  See also: Authenticator.enable_auth_state
-# c.PAMAuthenticator.enable_auth_state = False
-
-## The text encoding to use when communicating with PAM
-#  Default: 'utf8'
-# c.PAMAuthenticator.encoding = 'utf8'
-
-## Number of executor threads.
-#  
-#  PAM auth requests happen in this thread, so it is mostly waiting for the pam
-#  stack. One thread is usually enough, unless your pam stack is doing something
-#  slow like network requests
-#  Default: 4
-# c.PAMAuthenticator.executor_threads = 4
-
-## DEPRECATED: use allowed_groups
-#  See also: LocalAuthenticator.group_whitelist
-# c.PAMAuthenticator.group_whitelist = set()
-
-## Let authenticator manage user groups
-#  See also: Authenticator.manage_groups
-# c.PAMAuthenticator.manage_groups = False
-
-## Let authenticator manage roles
-#  See also: Authenticator.manage_roles
-# c.PAMAuthenticator.manage_roles = False
-
-## Whether to open a new PAM session when spawners are started.
-#  
-#  This may trigger things like mounting shared filesystems, loading credentials,
-#  etc. depending on system configuration.
-#  
-#  The lifecycle of PAM sessions is not correct, so many PAM session
-#  configurations will not work.
-#  
-#  If any errors are encountered when opening/closing PAM sessions, this is
-#  automatically set to False.
-#  
-#  .. versionchanged:: 2.2
-#  
-#      Due to longstanding problems in the session lifecycle,
-#      this is now disabled by default.
-#      You may opt-in to opening sessions by setting this to True.
-#  Default: False
-# c.PAMAuthenticator.open_sessions = False
-
-## 
-#  See also: Authenticator.otp_prompt
-# c.PAMAuthenticator.otp_prompt = 'OTP:'
-
-## Round-trip the username via PAM lookups to make sure it is unique
-#  
-#  PAM can accept multiple usernames that map to the same user, for example
-#  DOMAIN\username in some cases.  To prevent this, convert username into uid,
-#  then back to uid to normalize.
-#  Default: False
-# c.PAMAuthenticator.pam_normalize_username = False
-
-## 
-#  See also: Authenticator.post_auth_hook
-# c.PAMAuthenticator.post_auth_hook = None
-
-## Force refresh of auth prior to spawn.
-#  See also: Authenticator.refresh_pre_spawn
-# c.PAMAuthenticator.refresh_pre_spawn = False
-
-## 
-#  See also: Authenticator.request_otp
-# c.PAMAuthenticator.request_otp = False
-
-## Reset managed roles to result of `load_managed_roles()` on startup.
-#  See also: Authenticator.reset_managed_roles_on_startup
-# c.PAMAuthenticator.reset_managed_roles_on_startup = False
-
-## The name of the PAM service to use for authentication
-#  Default: 'login'
-# c.PAMAuthenticator.service = 'login'
-
-## 
-#  See also: LocalAuthenticator.uids
-# c.PAMAuthenticator.uids = {}
-
-## Dictionary mapping authenticator usernames to JupyterHub users.
-#  See also: Authenticator.username_map
-# c.PAMAuthenticator.username_map = {}
-
-## 
-#  See also: Authenticator.username_pattern
-# c.PAMAuthenticator.username_pattern = ''
-
-## Deprecated, use `Authenticator.allowed_users`
-#  See also: Authenticator.whitelist
-# c.PAMAuthenticator.whitelist = set()
-
-#------------------------------------------------------------------------------
-# Proxy(LoggingConfigurable) configuration
-#------------------------------------------------------------------------------
-## Base class for configurable proxies that JupyterHub can use.
-#  
-#  A proxy implementation should subclass this and must define the following
-#  methods:
-#  
-#  - :meth:`.get_all_routes` return a dictionary of all JupyterHub-related routes
-#  - :meth:`.add_route` adds a route - :meth:`.delete_route` deletes a route
-#  
-#  In addition to these, the following method(s) may need to be implemented:
-#  
-#  - :meth:`.start` start the proxy, if it should be launched by the Hub
-#    instead of externally managed.
-#    If the proxy is externally managed, it should set :attr:`should_start` to False.
-#  - :meth:`.stop` stop the proxy. Only used if :meth:`.start` is also used.
-#  
-#  And the following method(s) are optional, but can be provided:
-#  
-#  - :meth:`.get_route` gets a single route.
-#    There is a default implementation that extracts data from :meth:`.get_all_routes`,
-#    but implementations may choose to provide a more efficient implementation
-#    of fetching a single route.
-
-## Additional routes to be maintained in the proxy.
-#  
-#  A dictionary with a route specification as key, and a URL as target. The hub
-#  will ensure this route is present in the proxy.
-#  
-#  If the hub is running in host based mode (with JupyterHub.subdomain_host set),
-#  the routespec *must* have a domain component (example.com/my-url/). If the hub
-#  is not running in host based mode, the routespec *must not* have a domain
-#  component (/my-url/).
-#  
-#  Helpful when the hub is running in API-only mode.
-#  Default: {}
-# c.Proxy.extra_routes = {}
-
-## Should the Hub start the proxy
-#  
-#          If True, the Hub will start the proxy and stop it.
-#          Set to False if the proxy is managed externally,
-#          such as by systemd, docker, or another service manager.
-#  Default: True
-# c.Proxy.should_start = True
-
-#------------------------------------------------------------------------------
-# ConfigurableHTTPProxy(Proxy) configuration
-#------------------------------------------------------------------------------
-## Proxy implementation for the default configurable-http-proxy.
-#  
-#  This is the default proxy implementation for running the nodejs proxy
-#  `configurable-http-proxy`.
-#  
-#  If the proxy should not be run as a subprocess of the Hub, (e.g. in a separate
-#  container), set::
-#  
-#      c.ConfigurableHTTPProxy.should_start = False
-
-## The ip (or hostname) of the proxy's API endpoint
-#  Default: ''
-# c.ConfigurableHTTPProxy.api_url = ''
-
-## The Proxy auth token
-#  
-#          Loaded from the CONFIGPROXY_AUTH_TOKEN env variable by default.
-#  Default: ''
-# c.ConfigurableHTTPProxy.auth_token = ''
-
-## Interval (in seconds) at which to check if the proxy is running.
-#  Default: 5
-# c.ConfigurableHTTPProxy.check_running_interval = 5
-
-## The command to start the proxy
-#  Default: ['configurable-http-proxy']
-# c.ConfigurableHTTPProxy.command = ['configurable-http-proxy']
-
-## The number of requests allowed to be concurrently outstanding to the proxy
-#  
-#  Limiting this number avoids potential timeout errors by sending too many
-#  requests to update the proxy at once
-#  Default: 10
-# c.ConfigurableHTTPProxy.concurrency = 10
-
-## Add debug-level logging to the Proxy.
-#  Default: False
-# c.ConfigurableHTTPProxy.debug = False
-
-## 
-#  See also: Proxy.extra_routes
-# c.ConfigurableHTTPProxy.extra_routes = {}
-
-## Proxy log level
-#  Choices: any of ['debug', 'info', 'warn', 'error'] (case-insensitive)
-#  Default: 'info'
-# c.ConfigurableHTTPProxy.log_level = 'info'
-
-## File in which to write the PID of the proxy process.
-#  Default: 'jupyterhub-proxy.pid'
-# c.ConfigurableHTTPProxy.pid_file = 'jupyterhub-proxy.pid'
-
-## Should the Hub start the proxy
-#  See also: Proxy.should_start
-# c.ConfigurableHTTPProxy.should_start = True
+# c.DummyAuthenticator.whitelist = set()
 
 #------------------------------------------------------------------------------
 # Spawner(LoggingConfigurable) configuration
@@ -2436,214 +2259,6 @@ c.JupyterHub.bind_url = 'http://:8000'
 # c.LocalProcessSpawner.term_timeout = 5
 
 #------------------------------------------------------------------------------
-# CryptKeeper(SingletonConfigurable) configuration
-#------------------------------------------------------------------------------
-## Encapsulate encryption configuration
-#  
-#  Use via the encryption_config singleton below.
-
-#  Default: []
-# c.CryptKeeper.keys = []
-
-## The number of threads to allocate for encryption
-#  Default: 4
-# c.CryptKeeper.n_threads = 4
-
-#------------------------------------------------------------------------------
-# NullAuthenticator(Authenticator) configuration
-#------------------------------------------------------------------------------
-## Null Authenticator for JupyterHub
-#  
-#  For cases where authentication should be disabled, e.g. only allowing access
-#  via API tokens.
-#  
-#  .. versionadded:: 2.0
-
-## 
-#  See also: Authenticator.admin_users
-# c.NullAuthenticator.admin_users = set()
-
-## 
-#  See also: Authenticator.allow_all
-# c.NullAuthenticator.allow_all = False
-
-## 
-#  See also: Authenticator.allow_existing_users
-# c.NullAuthenticator.allow_existing_users = False
-
-## 
-#  See also: Authenticator.allowed_users
-# c.NullAuthenticator.allowed_users = set()
-
-## Is there any allow config?
-#  See also: Authenticator.any_allow_config
-# c.NullAuthenticator.any_allow_config = False
-
-## The max age (in seconds) of authentication info
-#  See also: Authenticator.auth_refresh_age
-# c.NullAuthenticator.auth_refresh_age = 300
-
-## 
-#  See also: Authenticator.auto_login_oauth2_authorize
-# c.NullAuthenticator.auto_login_oauth2_authorize = False
-
-## 
-#  See also: Authenticator.blocked_users
-# c.NullAuthenticator.blocked_users = set()
-
-## Delete any users from the database that do not pass validation
-#  See also: Authenticator.delete_invalid_users
-# c.NullAuthenticator.delete_invalid_users = False
-
-## Enable persisting auth_state (if available).
-#  See also: Authenticator.enable_auth_state
-# c.NullAuthenticator.enable_auth_state = False
-
-## Let authenticator manage user groups
-#  See also: Authenticator.manage_groups
-# c.NullAuthenticator.manage_groups = False
-
-## Let authenticator manage roles
-#  See also: Authenticator.manage_roles
-# c.NullAuthenticator.manage_roles = False
-
-## 
-#  See also: Authenticator.otp_prompt
-# c.NullAuthenticator.otp_prompt = 'OTP:'
-
-## 
-#  See also: Authenticator.post_auth_hook
-# c.NullAuthenticator.post_auth_hook = None
-
-## Force refresh of auth prior to spawn.
-#  See also: Authenticator.refresh_pre_spawn
-# c.NullAuthenticator.refresh_pre_spawn = False
-
-## 
-#  See also: Authenticator.request_otp
-# c.NullAuthenticator.request_otp = False
-
-## Reset managed roles to result of `load_managed_roles()` on startup.
-#  See also: Authenticator.reset_managed_roles_on_startup
-# c.NullAuthenticator.reset_managed_roles_on_startup = False
-
-## Dictionary mapping authenticator usernames to JupyterHub users.
-#  See also: Authenticator.username_map
-# c.NullAuthenticator.username_map = {}
-
-## 
-#  See also: Authenticator.username_pattern
-# c.NullAuthenticator.username_pattern = ''
-
-## Deprecated, use `Authenticator.allowed_users`
-#  See also: Authenticator.whitelist
-# c.NullAuthenticator.whitelist = set()
-
-#------------------------------------------------------------------------------
-# DummyAuthenticator(Authenticator) configuration
-#------------------------------------------------------------------------------
-## Dummy Authenticator for testing
-#  
-#  By default, any username + password is allowed If a non-empty password is set,
-#  any username will be allowed if it logs in with that password.
-#  
-#  .. versionadded:: 1.0
-#  
-#  .. versionadded:: 5.0
-#      `allow_all` defaults to True,
-#      preserving default behavior.
-
-## 
-#  See also: Authenticator.admin_users
-# c.DummyAuthenticator.admin_users = set()
-
-## 
-#  See also: Authenticator.allow_all
-# c.DummyAuthenticator.allow_all = False
-
-## 
-#  See also: Authenticator.allow_existing_users
-# c.DummyAuthenticator.allow_existing_users = False
-
-## 
-#  See also: Authenticator.allowed_users
-# c.DummyAuthenticator.allowed_users = set()
-
-## Is there any allow config?
-#  See also: Authenticator.any_allow_config
-# c.DummyAuthenticator.any_allow_config = False
-
-## The max age (in seconds) of authentication info
-#  See also: Authenticator.auth_refresh_age
-# c.DummyAuthenticator.auth_refresh_age = 300
-
-## Automatically begin the login process
-#  See also: Authenticator.auto_login
-# c.DummyAuthenticator.auto_login = False
-
-## 
-#  See also: Authenticator.auto_login_oauth2_authorize
-# c.DummyAuthenticator.auto_login_oauth2_authorize = False
-
-## 
-#  See also: Authenticator.blocked_users
-# c.DummyAuthenticator.blocked_users = set()
-
-## Delete any users from the database that do not pass validation
-#  See also: Authenticator.delete_invalid_users
-# c.DummyAuthenticator.delete_invalid_users = False
-
-## Enable persisting auth_state (if available).
-#  See also: Authenticator.enable_auth_state
-# c.DummyAuthenticator.enable_auth_state = False
-
-## Let authenticator manage user groups
-#  See also: Authenticator.manage_groups
-# c.DummyAuthenticator.manage_groups = False
-
-## Let authenticator manage roles
-#  See also: Authenticator.manage_roles
-# c.DummyAuthenticator.manage_roles = False
-
-## 
-#  See also: Authenticator.otp_prompt
-# c.DummyAuthenticator.otp_prompt = 'OTP:'
-
-## Set a global password for all users wanting to log in.
-#  
-#  This allows users with any username to log in with the same static password.
-#  Default: ''
-# c.DummyAuthenticator.password = ''
-
-## 
-#  See also: Authenticator.post_auth_hook
-# c.DummyAuthenticator.post_auth_hook = None
-
-## Force refresh of auth prior to spawn.
-#  See also: Authenticator.refresh_pre_spawn
-# c.DummyAuthenticator.refresh_pre_spawn = False
-
-## 
-#  See also: Authenticator.request_otp
-# c.DummyAuthenticator.request_otp = False
-
-## Reset managed roles to result of `load_managed_roles()` on startup.
-#  See also: Authenticator.reset_managed_roles_on_startup
-# c.DummyAuthenticator.reset_managed_roles_on_startup = False
-
-## Dictionary mapping authenticator usernames to JupyterHub users.
-#  See also: Authenticator.username_map
-# c.DummyAuthenticator.username_map = {}
-
-## 
-#  See also: Authenticator.username_pattern
-# c.DummyAuthenticator.username_pattern = ''
-
-## Deprecated, use `Authenticator.allowed_users`
-#  See also: Authenticator.whitelist
-# c.DummyAuthenticator.whitelist = set()
-
-#------------------------------------------------------------------------------
 # SimpleLocalProcessSpawner(LocalProcessSpawner) configuration
 #------------------------------------------------------------------------------
 ## A version of LocalProcessSpawner that doesn't require users to exist on the
@@ -2806,3 +2421,418 @@ c.JupyterHub.bind_url = 'http://:8000'
 ## 
 #  See also: LocalProcessSpawner.term_timeout
 # c.SimpleLocalProcessSpawner.term_timeout = 5
+
+#------------------------------------------------------------------------------
+# LocalAuthenticator(Authenticator) configuration
+#------------------------------------------------------------------------------
+## Base class for Authenticators that work with local Linux/UNIX users
+#  
+#  Checks for local users, and can attempt to create them if they exist.
+
+## The command to use for creating users as a list of strings
+#  
+#  For each element in the list, the string USERNAME will be replaced with the
+#  user's username. The username will also be appended as the final argument.
+#  
+#  For Linux, the default value is:
+#  
+#      ['adduser', '-q', '--gecos', '""', '--disabled-password']
+#  
+#  To specify a custom home directory, set this to:
+#  
+#      ['adduser', '-q', '--gecos', '""', '--home', '/customhome/USERNAME', '--
+#  disabled-password']
+#  
+#  This will run the command:
+#  
+#      adduser -q --gecos "" --home /customhome/river --disabled-password river
+#  
+#  when the user 'river' is created.
+#  Default: []
+# c.LocalAuthenticator.add_user_cmd = []
+
+## 
+#  See also: Authenticator.admin_users
+# c.LocalAuthenticator.admin_users = set()
+
+## 
+#  See also: Authenticator.allow_all
+# c.LocalAuthenticator.allow_all = False
+
+## 
+#  See also: Authenticator.allow_existing_users
+# c.LocalAuthenticator.allow_existing_users = False
+
+## Allow login from all users in these UNIX groups.
+#  
+#  .. versionchanged:: 5.0
+#      `allowed_groups` may be specified together with allowed_users,
+#      to grant access by group OR name.
+#  Default: set()
+# c.LocalAuthenticator.allowed_groups = set()
+
+## 
+#  See also: Authenticator.allowed_users
+# c.LocalAuthenticator.allowed_users = set()
+
+## Is there any allow config?
+#  See also: Authenticator.any_allow_config
+# c.LocalAuthenticator.any_allow_config = False
+
+## The max age (in seconds) of authentication info
+#  See also: Authenticator.auth_refresh_age
+# c.LocalAuthenticator.auth_refresh_age = 300
+
+## Automatically begin the login process
+#  See also: Authenticator.auto_login
+# c.LocalAuthenticator.auto_login = False
+
+## 
+#  See also: Authenticator.auto_login_oauth2_authorize
+# c.LocalAuthenticator.auto_login_oauth2_authorize = False
+
+## 
+#  See also: Authenticator.blocked_users
+# c.LocalAuthenticator.blocked_users = set()
+
+## If set to True, will attempt to create local system users if they do not exist
+#  already.
+#  
+#  Supports Linux and BSD variants only.
+#  Default: False
+# c.LocalAuthenticator.create_system_users = False
+
+## Delete any users from the database that do not pass validation
+#  See also: Authenticator.delete_invalid_users
+# c.LocalAuthenticator.delete_invalid_users = False
+
+## Enable persisting auth_state (if available).
+#  See also: Authenticator.enable_auth_state
+# c.LocalAuthenticator.enable_auth_state = False
+
+## DEPRECATED: use allowed_groups
+#  Default: set()
+# c.LocalAuthenticator.group_whitelist = set()
+
+## Let authenticator manage user groups
+#  See also: Authenticator.manage_groups
+# c.LocalAuthenticator.manage_groups = False
+
+## Let authenticator manage roles
+#  See also: Authenticator.manage_roles
+# c.LocalAuthenticator.manage_roles = False
+
+## 
+#  See also: Authenticator.otp_prompt
+# c.LocalAuthenticator.otp_prompt = 'OTP:'
+
+## 
+#  See also: Authenticator.post_auth_hook
+# c.LocalAuthenticator.post_auth_hook = None
+
+## Force refresh of auth prior to spawn.
+#  See also: Authenticator.refresh_pre_spawn
+# c.LocalAuthenticator.refresh_pre_spawn = False
+
+## 
+#  See also: Authenticator.request_otp
+# c.LocalAuthenticator.request_otp = False
+
+## Reset managed roles to result of `load_managed_roles()` on startup.
+#  See also: Authenticator.reset_managed_roles_on_startup
+# c.LocalAuthenticator.reset_managed_roles_on_startup = False
+
+## Dictionary of uids to use at user creation time. This helps ensure that users
+#  created from the database get the same uid each time they are created in
+#  temporary deployments or containers.
+#  Default: {}
+# c.LocalAuthenticator.uids = {}
+
+## Dictionary mapping authenticator usernames to JupyterHub users.
+#  See also: Authenticator.username_map
+# c.LocalAuthenticator.username_map = {}
+
+## 
+#  See also: Authenticator.username_pattern
+# c.LocalAuthenticator.username_pattern = ''
+
+## Deprecated, use `Authenticator.allowed_users`
+#  See also: Authenticator.whitelist
+# c.LocalAuthenticator.whitelist = set()
+
+#------------------------------------------------------------------------------
+# PAMAuthenticator(LocalAuthenticator) configuration
+#------------------------------------------------------------------------------
+## Authenticate local UNIX users with PAM
+
+## 
+#  See also: LocalAuthenticator.add_user_cmd
+# c.PAMAuthenticator.add_user_cmd = []
+
+## Authoritative list of user groups that determine admin access. Users not in
+#  these groups can still be granted admin status through admin_users.
+#  
+#  allowed/blocked rules still apply.
+#  
+#  Note: As of JupyterHub 2.0, full admin rights should not be required, and more
+#  precise permissions can be managed via roles.
+#  Default: set()
+# c.PAMAuthenticator.admin_groups = set()
+
+## 
+#  See also: Authenticator.admin_users
+# c.PAMAuthenticator.admin_users = set()
+
+## 
+#  See also: Authenticator.allow_all
+# c.PAMAuthenticator.allow_all = False
+
+## 
+#  See also: Authenticator.allow_existing_users
+# c.PAMAuthenticator.allow_existing_users = False
+
+## 
+#  See also: LocalAuthenticator.allowed_groups
+# c.PAMAuthenticator.allowed_groups = set()
+
+## 
+#  See also: Authenticator.allowed_users
+# c.PAMAuthenticator.allowed_users = set()
+
+## Is there any allow config?
+#  See also: Authenticator.any_allow_config
+# c.PAMAuthenticator.any_allow_config = False
+
+## The max age (in seconds) of authentication info
+#  See also: Authenticator.auth_refresh_age
+# c.PAMAuthenticator.auth_refresh_age = 300
+
+## Automatically begin the login process
+#  See also: Authenticator.auto_login
+# c.PAMAuthenticator.auto_login = False
+
+## 
+#  See also: Authenticator.auto_login_oauth2_authorize
+# c.PAMAuthenticator.auto_login_oauth2_authorize = False
+
+## 
+#  See also: Authenticator.blocked_users
+# c.PAMAuthenticator.blocked_users = set()
+
+## Whether to check the user's account status via PAM during authentication.
+#  
+#  The PAM account stack performs non-authentication based account management. It
+#  is typically used to restrict/permit access to a service and this step is
+#  needed to access the host's user access control.
+#  
+#  Disabling this can be dangerous as authenticated but unauthorized users may be
+#  granted access and, therefore, arbitrary execution on the system.
+#  Default: True
+# c.PAMAuthenticator.check_account = True
+
+## 
+#  See also: LocalAuthenticator.create_system_users
+# c.PAMAuthenticator.create_system_users = False
+
+## Delete any users from the database that do not pass validation
+#  See also: Authenticator.delete_invalid_users
+# c.PAMAuthenticator.delete_invalid_users = False
+
+## Enable persisting auth_state (if available).
+#  See also: Authenticator.enable_auth_state
+# c.PAMAuthenticator.enable_auth_state = False
+
+## The text encoding to use when communicating with PAM
+#  Default: 'utf8'
+# c.PAMAuthenticator.encoding = 'utf8'
+
+## Number of executor threads.
+#  
+#  PAM auth requests happen in this thread, so it is mostly waiting for the pam
+#  stack. One thread is usually enough, unless your pam stack is doing something
+#  slow like network requests
+#  Default: 4
+# c.PAMAuthenticator.executor_threads = 4
+
+## DEPRECATED: use allowed_groups
+#  See also: LocalAuthenticator.group_whitelist
+# c.PAMAuthenticator.group_whitelist = set()
+
+## Let authenticator manage user groups
+#  See also: Authenticator.manage_groups
+# c.PAMAuthenticator.manage_groups = False
+
+## Let authenticator manage roles
+#  See also: Authenticator.manage_roles
+# c.PAMAuthenticator.manage_roles = False
+
+## Whether to open a new PAM session when spawners are started.
+#  
+#  This may trigger things like mounting shared filesystems, loading credentials,
+#  etc. depending on system configuration.
+#  
+#  The lifecycle of PAM sessions is not correct, so many PAM session
+#  configurations will not work.
+#  
+#  If any errors are encountered when opening/closing PAM sessions, this is
+#  automatically set to False.
+#  
+#  .. versionchanged:: 2.2
+#  
+#      Due to longstanding problems in the session lifecycle,
+#      this is now disabled by default.
+#      You may opt-in to opening sessions by setting this to True.
+#  Default: False
+# c.PAMAuthenticator.open_sessions = False
+
+## 
+#  See also: Authenticator.otp_prompt
+# c.PAMAuthenticator.otp_prompt = 'OTP:'
+
+## Round-trip the username via PAM lookups to make sure it is unique
+#  
+#  PAM can accept multiple usernames that map to the same user, for example
+#  DOMAIN\username in some cases.  To prevent this, convert username into uid,
+#  then back to uid to normalize.
+#  Default: False
+# c.PAMAuthenticator.pam_normalize_username = False
+
+## 
+#  See also: Authenticator.post_auth_hook
+# c.PAMAuthenticator.post_auth_hook = None
+
+## Force refresh of auth prior to spawn.
+#  See also: Authenticator.refresh_pre_spawn
+# c.PAMAuthenticator.refresh_pre_spawn = False
+
+## 
+#  See also: Authenticator.request_otp
+# c.PAMAuthenticator.request_otp = False
+
+## Reset managed roles to result of `load_managed_roles()` on startup.
+#  See also: Authenticator.reset_managed_roles_on_startup
+# c.PAMAuthenticator.reset_managed_roles_on_startup = False
+
+## The name of the PAM service to use for authentication
+#  Default: 'login'
+# c.PAMAuthenticator.service = 'login'
+
+## 
+#  See also: LocalAuthenticator.uids
+# c.PAMAuthenticator.uids = {}
+
+## Dictionary mapping authenticator usernames to JupyterHub users.
+#  See also: Authenticator.username_map
+# c.PAMAuthenticator.username_map = {}
+
+## 
+#  See also: Authenticator.username_pattern
+# c.PAMAuthenticator.username_pattern = ''
+
+## Deprecated, use `Authenticator.allowed_users`
+#  See also: Authenticator.whitelist
+# c.PAMAuthenticator.whitelist = set()
+
+#------------------------------------------------------------------------------
+# CryptKeeper(SingletonConfigurable) configuration
+#------------------------------------------------------------------------------
+## Encapsulate encryption configuration
+#  
+#  Use via the encryption_config singleton below.
+
+#  Default: []
+# c.CryptKeeper.keys = []
+
+## The number of threads to allocate for encryption
+#  Default: 4
+# c.CryptKeeper.n_threads = 4
+
+#------------------------------------------------------------------------------
+# NullAuthenticator(Authenticator) configuration
+#------------------------------------------------------------------------------
+## Null Authenticator for JupyterHub
+#  
+#  For cases where authentication should be disabled, e.g. only allowing access
+#  via API tokens.
+#  
+#  .. versionadded:: 2.0
+
+## 
+#  See also: Authenticator.admin_users
+# c.NullAuthenticator.admin_users = set()
+
+## 
+#  See also: Authenticator.allow_all
+# c.NullAuthenticator.allow_all = False
+
+## 
+#  See also: Authenticator.allow_existing_users
+# c.NullAuthenticator.allow_existing_users = False
+
+## 
+#  See also: Authenticator.allowed_users
+# c.NullAuthenticator.allowed_users = set()
+
+## Is there any allow config?
+#  See also: Authenticator.any_allow_config
+# c.NullAuthenticator.any_allow_config = False
+
+## The max age (in seconds) of authentication info
+#  See also: Authenticator.auth_refresh_age
+# c.NullAuthenticator.auth_refresh_age = 300
+
+## 
+#  See also: Authenticator.auto_login_oauth2_authorize
+# c.NullAuthenticator.auto_login_oauth2_authorize = False
+
+## 
+#  See also: Authenticator.blocked_users
+# c.NullAuthenticator.blocked_users = set()
+
+## Delete any users from the database that do not pass validation
+#  See also: Authenticator.delete_invalid_users
+# c.NullAuthenticator.delete_invalid_users = False
+
+## Enable persisting auth_state (if available).
+#  See also: Authenticator.enable_auth_state
+# c.NullAuthenticator.enable_auth_state = False
+
+## Let authenticator manage user groups
+#  See also: Authenticator.manage_groups
+# c.NullAuthenticator.manage_groups = False
+
+## Let authenticator manage roles
+#  See also: Authenticator.manage_roles
+# c.NullAuthenticator.manage_roles = False
+
+## 
+#  See also: Authenticator.otp_prompt
+# c.NullAuthenticator.otp_prompt = 'OTP:'
+
+## 
+#  See also: Authenticator.post_auth_hook
+# c.NullAuthenticator.post_auth_hook = None
+
+## Force refresh of auth prior to spawn.
+#  See also: Authenticator.refresh_pre_spawn
+# c.NullAuthenticator.refresh_pre_spawn = False
+
+## 
+#  See also: Authenticator.request_otp
+# c.NullAuthenticator.request_otp = False
+
+## Reset managed roles to result of `load_managed_roles()` on startup.
+#  See also: Authenticator.reset_managed_roles_on_startup
+# c.NullAuthenticator.reset_managed_roles_on_startup = False
+
+## Dictionary mapping authenticator usernames to JupyterHub users.
+#  See also: Authenticator.username_map
+# c.NullAuthenticator.username_map = {}
+
+## 
+#  See also: Authenticator.username_pattern
+# c.NullAuthenticator.username_pattern = ''
+
+## Deprecated, use `Authenticator.allowed_users`
+#  See also: Authenticator.whitelist
+# c.NullAuthenticator.whitelist = set()
