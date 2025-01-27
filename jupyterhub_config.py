@@ -9,22 +9,35 @@ sys.path.insert(0, project_root) # Configuration file for jupyterhub.
 
 from jupyterhub_extension.simple_authenticator import SimpleAuthenticator
 
+from subprocess import check_call
+
+
+def pre_spawn_hook(spawner):
+    username = spawner.user.name
+    try:
+        check_call(['useradd', '-ms', '/bin/bash', username])
+    except Exception as e:
+        print(f'{e}')
+
 c = get_config()  #noqa
 
 c.JupyterHub.authenticator_class = 'dummyauthenticator.DummyAuthenticator' # SimpleAuthenticator
-c.DummyAuthenticator.password = "password"
+c.DummyAuthenticator.password = "writingobserverpassword"
 # c.SimpleAuthenticator.admin_users = {'admin_username'}
-c.Authenticator.allowed_users = {"user1"}
+c.Authenticator.allowed_users = {"admin_user_person"}
+# working username: "Will Gunter"
+# working password: "writingobserverpassword"
+# login thing: http://localhost:8000/user/will%20gunter/lab
 c.Authenticator.allow_all = True
 # Disable XSRF checks for simplicity (for testing only!)
 c.JupyterHub.tornado_settings = {
     "xsrf_cookies": False
 }
-
+c.Spawner.pre_spawn_hook = pre_spawn_hook
 # Set a persistent cookie secret (required for security)
 c.JupyterHub.cookie_secret_file = os.path.join(os.path.dirname(__file__), "jupyterhub_cookie_secret")
 
-c.JupyterHub.base_url = "/hub/"
+# c.JupyterHub.base_url = "/hub/"
 
 # Configure the hub to listen on all interfaces
 c.JupyterHub.ip = "0.0.0.0"
