@@ -4,8 +4,8 @@ Resources:
 https://github.com/jupyterlab/extension-examples/tree/main/hello-world
 https://github.com/jupyter/nbdime
 
-How to develop extension: 
-
+How to develop extension:
+# clone examples repository
 
 ### **B. Install JupyterLab Extension Tools**
 (after pip install cookiecutter {it helps create extensions with a standardized structure})
