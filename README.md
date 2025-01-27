@@ -4,15 +4,7 @@ How to develop extension:
 
 
 ### **B. Install JupyterLab Extension Tools**
-
-1. **Install the JupyterLab Extension Cookiecutter**
-
-   The cookiecutter template helps bootstrap new extensions with a standardized structure.
-
-   ```bash
-   pip install cookiecutter
-   ```
-
+(after pip install cookiecutter {it helps create extensions with a standardized structure})
 2. **Clone the JupyterLab Extension Repository (For Reference and Examples)**
 
    It's beneficial to explore existing extensions to understand best practices.
