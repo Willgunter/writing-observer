@@ -1,0 +1,1 @@
+Goal: Set up a jupyterhub server for the ArgLab Writing Observer team so that users can login to a jupyterhub server and execute code on data that they cannot see or have access to.
