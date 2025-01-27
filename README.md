@@ -7,6 +7,8 @@ https://github.com/jupyter/nbdime
 How to develop extension:
 # clone examples repository
 
+- Got custom jupyterlab extension to activate
+
 ### **B. Install JupyterLab Extension Tools**
 (after pip install cookiecutter {it helps create extensions with a standardized structure})
 2. **Clone the JupyterLab Extension Repository (For Reference and Examples)**
