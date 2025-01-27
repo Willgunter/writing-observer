@@ -1,5 +1,9 @@
 Goal: Set up a jupyterhub server for the ArgLab Writing Observer team so that users can login to a jupyterhub server and execute code on data that they cannot see or have access to.
 
+Resources:
+https://github.com/jupyterlab/extension-examples/tree/main/hello-world
+https://github.com/jupyter/nbdime
+
 How to develop extension: 
 
 
